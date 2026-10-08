@@ -481,7 +481,7 @@ function pickInitialMonth(){
 function selectMonth(id){ S.sel = id; S.txns = []; S.txMonth = id; S.ui = {}; S.be.watchMonth(id); render(); window.scrollTo({ top: 0 }); }
 
 /* ================= RENDER ================= */
-const TAB_ICONS = { home: ['house','Home'], activity: ['list-bullets','Activity'], plan: ['chart-bar','Plan'], payday: ['wallet','Payday'] };
+const TAB_ICONS = { home: ['house','Home'], activity: ['list-bullets','Spent'], plan: ['chart-bar','Plan'], payday: ['wallet','Payday'] };
 function chrome(showNav){
   document.getElementById('nav').hidden = !showNav;
   document.getElementById('monthNav').style.visibility = showNav ? 'visible' : 'hidden';
@@ -511,42 +511,34 @@ function render(){
 
 /* ---------- Home ---------- */
 function homeView(m, r){
-  const isCur = S.sel === curMonthId();
   const neg = r.cashLeft < 0;
-  const notes = attention(r);
   const bills = r.fixed.filter(c => S.ui.showDone || c.left > 0);
-  const groupsShown = ['needs','wants','savings'].filter(g => bills.some(c => c.group === g));
+  const order = ['needs','wants','savings'];
+  bills.sort((x,y) => order.indexOf(x.group) - order.indexOf(y.group));
+  const flex = [...r.flexCats].sort((x,y) => order.indexOf(x.group) - order.indexOf(y.group));
   return `
   <section class="card hero" aria-label="Summary">
-    <p class="label">Left to spend in ${monthName(S.sel, true)}</p>
+    <p class="label">Left this month</p>
     <p class="amount ${neg?'neg':''}"><span class="cur">${neg?'−':''}₦</span>${Math.abs(Math.round(r.cashLeft)).toLocaleString('en-NG')}</p>
-    <p class="sub">${isCur && r.daysLeft > 0 ? `<b>${fmt(r.safePerDay)}</b> a day · ${r.daysLeft} days left` : S.sel < curMonthId() ? 'This month is closed' : 'This month hasn’t started'}</p>
-    <span class="pill ${r.status.tone}" style="margin-top:var(--s2)">${esc(r.status.text)}</span>
-    <div class="actions">
-      <button class="btn primary" data-a="add">${ic('plus-bold')}Add spending</button>
-      <button class="btn" data-a="afford">Can I afford it?</button>
-    </div>
+    <p class="sub">${fmt(r.totalSpent)} spent of ${fmt(r.cashIn)}</p>
+    <div class="bar" style="margin-top:var(--s3)"><i class="${neg?'bad':'ink'}" style="width:${pct(r.totalSpent, r.cashIn)}%"></i></div>
   </section>
 
-  <section class="card" aria-label="Monthly bills">
-    <div class="head"><h2>Monthly bills</h2><span class="aside">${r.fixedDue > 0 ? fmt(r.fixedDue) + ' <span class="ink2" style="font-weight:400">to go</span>' : '<span class="pos">All done</span>'}</span></div>
-    ${r.fixed.length ? `<div class="meter"><div class="bar"><i class="ink" style="width:${pct(r.fixedDone, r.fixed.length)}%"></i></div><p class="caption">${r.fixedDone} of ${r.fixed.length} paid</p></div>` : ''}
-    ${bills.length ? `<div class="rows">${groupsShown.flatMap(g => bills.filter(c => c.group === g)).map(billRow).join('')}</div>`
-      : `<p class="ink2">${r.fixed.length ? 'Every bill is paid this month.' : 'No monthly bills yet. Add them in Plan.'}</p>`}
+  <section class="card" aria-label="Bills">
+    <div class="head"><h2>Bills</h2><span class="aside">${r.fixedDue > 0 ? `${fmt(r.fixedDue)} <span class="ink2" style="font-weight:400">to pay</span>` : '<span class="pos">All paid</span>'}</span></div>
+    ${bills.length ? `<div class="rows">${bills.map(billRow).join('')}</div>` : `<p class="ink2">${r.fixed.length ? 'Every bill is paid this month.' : 'No bills yet. Add them in Plan.'}</p>`}
     ${r.fixedDone ? `<button class="link" data-a="showdone">${S.ui.showDone ? 'Hide paid' : `Show paid (${r.fixedDone})`}</button>` : ''}
   </section>
 
-  <section class="card" aria-label="Everyday spending">
-    <div class="head"><h2>Everyday spending</h2><span class="aside">${fmt(r.flexLeft)} <span class="ink2" style="font-weight:400">left</span></span></div>
-    <div class="rows" style="margin:0">${r.flexCats.map(spendRow).join('') || '<p class="ink2">No everyday budgets yet. Add them in Plan.</p>'}</div>
-  </section>
-
-  ${notes.length ? `<section class="card" aria-label="Heads up"><div class="head"><h2>Heads up</h2></div><ul class="notes">${notes.slice(0,3).map(([t,x]) => `<li class="${t}"><span>${x}</span></li>`).join('')}</ul></section>` : ''}`;
+  <section class="card" aria-label="Everyday">
+    <div class="head"><h2>Everyday</h2><span class="aside">${fmt(r.flexLeft)} <span class="ink2" style="font-weight:400">left</span></span></div>
+    <div class="rows" style="margin:0">${flex.map(spendRow).join('') || '<p class="ink2">No everyday budgets yet. Add them in Plan.</p>'}</div>
+  </section>`;
 }
 function billRow(c){
   const done = c.left <= 0; const partial = !done && c.spent > 0;
   const editing = S.ui.editBill === c.id;
-  const meta = done && c.spent !== c.budget ? `Paid ${fmt(c.spent)}` : partial ? `${fmt(c.spent)} paid` : c.group === 'savings' ? 'Set aside' : '';
+  const meta = partial ? `${fmt(c.spent)} paid so far` : c.group === 'savings' ? 'Set aside' : '';
   return `<div class="row ${done?'done':''}" style="flex-wrap:wrap">
     <button class="tick ${partial?'partial':''}" data-a="tick" data-id="${c.id}" aria-label="${done?'Mark not paid':'Mark paid'}: ${esc(c.name)}">${ic('check-bold')}</button>
     <button class="main" data-a="editbill" data-id="${c.id}"><span class="name">${esc(c.name)}</span>${meta ? `<span class="meta">${meta}</span>` : ''}</button>
@@ -555,13 +547,10 @@ function billRow(c){
   </div>`;
 }
 function spendRow(c){
-  const tone = c.over > 0 ? 'bad' : c.paceOver ? 'warn' : '';
-  const right = c.over > 0 ? `<span class="neg">${fmt(c.over)} over</span>` : `${fmt(c.left)} left`;
-  const caption = c.paceOver && !c.over ? `<span class="warnc">Ahead of pace</span>` : `${fmt(c.spent)} of ${fmt(c.budget)}`;
+  const over = c.over > 0;
   return `<button class="spend" data-a="add" data-cat="${c.id}">
-    <span class="r1"><span class="name">${esc(c.name)}</span><span class="amt">${right}</span></span>
-    <span class="bar"><i class="${tone}" style="width:${pct(c.spent,c.budget)}%"></i></span>
-    <span class="r2"><span>${caption}</span></span>
+    <span class="r1"><span class="name">${esc(c.name)}</span><span class="amt ${over?'neg':''}">${over ? `${fmt(c.over)} over` : `${fmt(c.left)} left`}</span></span>
+    <span class="bar"><i class="${over ? 'bad' : c.paceOver ? 'warn' : ''}" style="width:${pct(c.spent,c.budget)}%"></i></span>
   </button>`;
 }
 function attention(r){
@@ -576,45 +565,50 @@ function attention(r){
   return a;
 }
 
-/* ---------- Activity ---------- */
+/* ---------- Where it went ---------- */
 function activityView(m, r){
   const byCat = Object.fromEntries((m.categories||[]).map(c=>[c.id,c]));
   const f = S.ui.filter || '';
+  const spent = r.cats.filter(c => c.spent > 0).sort((x,y) => y.spent - x.spent);
+  const top = spent.length ? spent[0].spent : 1;
   const tx = S.txns.filter(t => !f || t.cat === f).slice().sort((a,b)=> (b.date||'').localeCompare(a.date||'') || (b.ts||0)-(a.ts||0));
   let last = '', out = '';
   for (const t of tx) {
     if (t.date !== last) { if (last) out += '</div>'; last = t.date; out += `<p class="group-label">${new Date(t.date+'T12:00').toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'})}</p><div class="rows">`; }
     const c = byCat[t.cat]; const conf = S.ui.confirm === t.id;
-    out += `<div class="row"><div class="main"><span class="name">${esc(t.note || (c?c.name:'Spending'))}</span><span class="meta">${c?esc(c.name):'Removed category'}</span></div><span class="amt">${fmt(t.amount)}</span>
+    out += `<div class="row"><div class="main"><span class="name">${esc(t.note || (c?c.name:'Spending'))}</span>${t.note && c && !t.note.startsWith(c.name) ? `<span class="meta">${esc(c.name)}</span>` : ''}</div><span class="amt">${fmt(t.amount)}</span>
       <button class="${conf?'btn sm danger':'icon-btn'}" data-a="deltx" data-id="${t.id}" aria-label="Delete">${conf ? 'Delete' : ic('trash')}</button></div>`;
   }
   if (last) out += '</div>';
-  const usedCats = [...new Set(S.txns.map(t => t.cat))].map(id => byCat[id]).filter(Boolean);
-  return `<section class="card"><div class="head"><h2>Activity</h2><span class="aside">${fmt(tx.reduce((s,t)=>s+(Number(t.amount)||0),0))}</span></div>
-    ${usedCats.length > 1 ? `<div class="chips"><button aria-pressed="${!f}" data-a="filter" data-id="">All</button>${usedCats.map(c => `<button aria-pressed="${f===c.id}" data-a="filter" data-id="${c.id}">${esc(c.name)}</button>`).join('')}</div>` : ''}
+  const fc = f && byCat[f];
+  return `<section class="card hero" aria-label="Spent">
+    <p class="label">Spent in ${monthName(S.sel, true)}</p>
+    <p class="amount"><span class="cur">₦</span>${Math.round(r.totalSpent).toLocaleString('en-NG')}</p>
+  </section>
+  ${spent.length ? `<section class="card"><div class="head"><h2>Where it went</h2></div><div class="rows" style="margin:0">${spent.map(c => `<button class="spend" data-a="filter" data-id="${f===c.id?'':c.id}"><span class="r1"><span class="name">${esc(c.name)}</span><span class="amt">${fmt(c.spent)}</span></span><span class="bar"><i class="ink" style="width:${pct(c.spent, top)}%;${f && f!==c.id ? 'opacity:.25' : ''}"></i></span></button>`).join('')}</div></section>` : ''}
+  <section class="card"><div class="head"><h2>${fc ? esc(fc.name) : 'Every entry'}</h2>${f ? '<button class="link" data-a="filter" data-id="" style="align-self:auto">Show all</button>' : ''}</div>
     ${out || '<p class="ink2">Nothing logged yet. Tap + to add spending.</p>'}</section>`;
 }
 
 /* ---------- Plan ---------- */
 function planView(m, r){
-  const over = r.unallocated < 0;
+  const gap = r.unallocated;
+  const line = gap < 0 ? `<p class="neg">Your budgets are ${fmt(-gap)} more than you have. Lower one below.</p>`
+    : gap > 0 ? `<p class="ink2">${fmt(gap)} isn\u2019t budgeted yet.</p>` : `<p class="pos">Every naira has a job.</p>`;
   const groups = ['needs','wants','savings'].map(g => {
-    const cs = r.cats.filter(c=>c.group===g); const x = r.groups[g]; const t = r.targets[g]; const diff = x.budget - t;
-    const cap = Math.abs(diff) < 1000 ? `On the ${S.config.ngnPct[g]}% target` : diff > 0 ? `<span class="neg">${fmt(diff)} over</span> the ${S.config.ngnPct[g]}% target` : `${fmt(-diff)} under the ${S.config.ngnPct[g]}% target`;
-    return `<section class="card"><div class="head"><h2>${GROUPS[g]}</h2><span class="aside">${fmt(x.budget)}</span></div>
-      <div class="meter"><div class="bar"><i class="${diff > 999 ? 'bad' : 'ink'}" style="width:${pct(x.budget, t || 1)}%"></i></div><p class="caption">${cap}</p></div>
-      <div class="rows">${cs.map(c => `<button class="row" data-a="editcat" data-id="${c.id}"><span class="main"><span class="name">${esc(c.name)}</span><span class="meta">${c.role==='buffer' ? 'Covers needs overspend' : c.role==='ef' ? 'Don\u2019t touch' : c.kind==='fixed' ? 'Monthly bill' : 'Everyday'}</span></span><span class="amt">${fmt(c.budget)}</span><span class="chev">${ic('caret-right-bold')}</span></button>`).join('') || '<p class="ink2">Nothing here yet.</p>'}</div></section>`;
+    const cs = r.cats.filter(c=>c.group===g); if (!cs.length) return '';
+    return `<section class="card"><div class="head"><h2>${GROUPS[g]}</h2><span class="aside">${fmt(r.groups[g].budget)}</span></div>
+      <div class="rows">${cs.map(c => `<button class="row" data-a="editcat" data-id="${c.id}"><span class="main"><span class="name">${esc(c.name)}</span><span class="meta">${c.role==='buffer' ? 'Covers needs overspend' : c.role==='ef' ? 'Don\u2019t touch' : c.kind==='fixed' ? 'Bill' : 'Everyday'}</span></span><span class="amt">${fmt(c.budget)}</span><span class="chev">${ic('caret-right-bold')}</span></button>`).join('')}</div></section>`;
   }).join('');
   return `
   <section class="card">
-    <div class="head"><h2>${monthName(S.sel, true)} plan</h2><span class="pill ${over?'bad':r.unallocated>0?'warn':'ok'}">${over?'Over-planned':r.unallocated>0?'Unassigned money':'Every naira assigned'}</span></div>
     <div>
-      <div class="kv"><span class="k">Cash in<small>${m.rate ? `${fmtUSD(r.cashIn / m.rate)} at ₦${Number(m.rate).toLocaleString('en-NG')}` : ''}</small></span><span class="v">${fmt(r.cashIn)}</span></div>
-      <div class="kv"><span class="k">Planned</span><span class="v">${fmt(r.totalBudget)}</span></div>
-      <div class="kv strong"><span class="k">${over ? 'Over by' : 'Left to assign'}</span><span class="v ${over?'neg':''}">${fmt(Math.abs(r.unallocated))}</span></div>
+      <div class="kv"><span class="k">Money in</span><span class="v">${fmt(r.cashIn)}</span></div>
+      <div class="kv"><span class="k">Budgeted</span><span class="v">${fmt(r.totalBudget)}</span></div>
     </div>
-    <div class="actions" style="margin-top:0"><button class="btn primary" data-a="newcat">${ic('plus-bold')}Add category</button><button class="btn" data-a="move">${ic('arrows-left-right')}Move money</button></div>
-    <button class="link" data-a="cash">Change cash in</button>
+    ${line}
+    <div class="actions" style="margin-top:0"><button class="btn primary" data-a="newcat">${ic('plus-bold')}Add</button><button class="btn" data-a="move">${ic('arrows-left-right')}Move money</button></div>
+    <button class="link" data-a="cash">Change money in</button>
   </section>
   ${groups}`;
 }
@@ -766,9 +760,9 @@ function renderSheet(focus){
       <button class="btn primary block" type="submit">Move</button></form>`);
     focusId = 'mv-a';
   } else if (s.type === 'cash') {
-    html = sheetFrame('Change cash in', `<form data-f="cash" style="display:flex;flex-direction:column;gap:var(--s4)">
+    html = sheetFrame('Change money in', `<form data-f="cash" style="display:flex;flex-direction:column;gap:var(--s4)">
       <p class="ink2">The naira you have for ${monthName(S.sel, true)} after converting.</p>
-      <label class="field" for="cs-a">Cash in (₦)<input id="cs-a" name="cashIn" inputmode="decimal" value="${Math.round(Number(m.cashIn)||0)}"></label>
+      <label class="field" for="cs-a">Money in (₦)<input id="cs-a" name="cashIn" inputmode="decimal" value="${Math.round(Number(m.cashIn)||0)}"></label>
       <button class="btn primary block" type="submit">Save</button></form>`);
   }
   const root = document.getElementById('sheetRoot');
@@ -820,7 +814,7 @@ sheetRoot.addEventListener('submit', e => {
     closeSheet(); toast(`Moved ${fmt(v)}`);
   } else if (f.dataset.f === 'cash') {
     const v = parseAmt(fd.cashIn); if (!(v >= 0)) return toast('Enter an amount.');
-    act.saveMonth({ ...m, cashIn: v }); closeSheet(); toast('Cash in updated');
+    act.saveMonth({ ...m, cashIn: v }); closeSheet(); toast('Saved');
   }
 });
 function saveSpend(){
@@ -868,7 +862,7 @@ app.addEventListener('click', async e => {
   else if (a === 'editbill') { S.ui.editBill = S.ui.editBill === b.dataset.id ? null : b.dataset.id; render(); const el = document.getElementById('ba-' + b.dataset.id); if (el) { el.focus(); el.select(); } }
   else if (a === 'deltx') { if (S.ui.confirm === b.dataset.id) { S.ui.confirm = null; act.delTxn(b.dataset.id); toast('Deleted'); } else { S.ui.confirm = b.dataset.id; render(); } }
   else if (a === 'check') act.saveMonth({ ...m, checks: { ...(m.checks||{}), [b.dataset.id]: !(m.checks||{})[b.dataset.id] } });
-  else if (a === 'usecash') { const { d } = paydayCalc(m); act.saveMonth({ ...m, cashIn: Number(b.dataset.cash), rate: Number(d.rate), paycheckUSD: Number(d.paycheck) }); toast('Cash in updated'); }
+  else if (a === 'usecash') { const { d } = paydayCalc(m); act.saveMonth({ ...m, cashIn: Number(b.dataset.cash), rate: Number(d.rate), paycheckUSD: Number(d.paycheck) }); toast('Saved'); }
   else if (a === 'start') {
     const { d } = paydayCalc(null); const prev = Object.keys(S.months).filter(i => i < S.sel).sort().pop();
     const src = prev ? S.months[prev].categories : [];
