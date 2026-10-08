@@ -1,5 +1,6 @@
 import base64, sys
-src = open('src/app.html').read()
+import json as _j
+src = open('src/app.html').read().replace('/*@ICONS@*/{}', open('src/icons.json').read())
 weights = {'Regular':400,'Medium':500,'Semibold':600}
 def face(w, url): return '@font-face{font-family:"Open Runde";font-style:normal;font-weight:%d;font-display:swap;src:url(%s) format("woff2")}' % (weights[w], url)
 inline = ''.join(face(w, 'data:font/woff2;base64,' + base64.b64encode(open(f'fonts/OR-{w}.woff2','rb').read()).decode()) for w in weights)
