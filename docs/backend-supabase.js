@@ -51,7 +51,10 @@
   };
 
   function signIn(sb) {
-    return new Promise((resolve) => {
+    const chrome = [document.querySelector('nav.tabs'), document.querySelector('.top .month')];
+    chrome.forEach(el => el && (el.hidden = true));
+    return new Promise((done) => {
+      const resolve = (v) => { chrome.forEach(el => el && (el.hidden = false)); done(v); };
       const app = document.getElementById('app');
       const draw = (msg, tone) => {
         app.innerHTML = `<section class="card" style="margin-top:8vh">
